@@ -20,21 +20,19 @@ const registerSchema = z.object({
     contactName:      z.string().min(1, "Contact name is required"),
     contactEmail:     z.string().email("Valid contact email required").or(z.literal("")).optional(),
     contactPhone:     z.string().optional(),
-    /* additionalContacts is managed as local state (array), not a form field */
-    /* logo and msa are file inputs — z.any() so RHF registers them */
+
     logo:             z.any().optional(),
     msa:              z.any().optional(),
 });
 
-/* Edit form intentionally mirrors the register fields only — companyName,
-   website, contactName, contactEmail, contactPhone, logo, msa, +
-   additionalContacts (handled as local state). No billing/legal extras. */
 const editSchema = z.object({
     companyName:  z.string().min(1, "Company name is required"),
     website:      z.string().optional(),
     contactName:  z.string().min(1, "Contact name is required"),
     contactEmail: z.string().email("Valid contact email").or(z.literal("")).optional(),
     contactPhone: z.string().optional(),
+    logo:         z.any().optional(),
+    msa:          z.any().optional(),
 });
 
 const STEPS = [

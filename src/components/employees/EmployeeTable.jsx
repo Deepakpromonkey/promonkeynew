@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -18,7 +19,21 @@ function initials(name = "") {
     return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 }
 
-function Avatar({ name }) {
+function getDirectImageUrl(url) {
+    if (!url) return null;
+    if (url.includes("drive.google.com/file/d/")) {
+        const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) {
+            return `https://lh3.googleusercontent.com/d/${match[1]}`;
+        }
+    }
+    return url;
+}
+
+function Avatar({ name, photoUrl }) {
+    const directUrl = getDirectImageUrl(photoUrl);
+    const [imgFailed, setImgFailed] = useState(false);
+
     const colors = [
         "from-[#3C80F5] to-[#763CF6]",
         "from-[#16A34A] to-[#3C80F5]",
@@ -27,12 +42,27 @@ function Avatar({ name }) {
         "from-[#DC2626] to-[#E08600]",
     ];
     const idx = name?.charCodeAt(0) % colors.length ?? 0;
+
     return (
-        <div className={cn(
-            "w-9 h-9 rounded-full bg-gradient-to-br flex items-center justify-center text-white text-[12px] font-bold shrink-0",
-            colors[idx]
-        )}>
-            {initials(name)}
+        <div className="relative w-9 h-9 shrink-0">
+            {directUrl && !imgFailed ? (
+                <img
+                    src={directUrl}
+                    alt={name}
+                    referrerPolicy="no-referrer"
+                    className="w-9 h-9 rounded-full object-cover border border-[#E7EBF2]"
+                    onError={() => setImgFailed(true)}
+                />
+            ) : (
+                <div 
+                    className={cn(
+                        "w-9 h-9 rounded-full bg-gradient-to-br flex items-center justify-center text-white text-[12px] font-bold",
+                        colors[idx]
+                    )}
+                >
+                    {initials(name)}
+                </div>
+            )}
         </div>
     );
 }
@@ -40,8 +70,8 @@ function Avatar({ name }) {
 export function EmployeeTable({ data, pagination, onPageChange, onEdit, onDelete }) {
     const router = useRouter();
     const [deleteTarget, setDeleteTarget] = useState(null);
-    const [deleting,     setDeleting]     = useState(false);
-    const [deleteError,  setDeleteError]  = useState("");
+    const [deleting, setDeleting] = useState(false);
+    const [deleteError, setDeleteError] = useState("");
 
     const columns = useMemo(() => [
         {
@@ -51,7 +81,7 @@ export function EmployeeTable({ data, pagination, onPageChange, onEdit, onDelete
                 const e = row.original;
                 return (
                     <div className="flex items-center gap-3">
-                        <Avatar name={e.legalName} />
+                        <Avatar name={e.legalName} photoUrl={e.profilePhotoUrl} />
                         <div>
                             <p className="text-[13.5px] font-semibold text-[#1B2330]">{e.legalName}</p>
                             <p className="text-[11.5px] text-[#94A3B5]">{e.designation}</p>

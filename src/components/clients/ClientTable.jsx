@@ -1,4 +1,3 @@
-
 "use client";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -15,7 +14,6 @@ import {
 import { DataTable } from "../Datatable";
 import { cn } from "@/lib/utils";
 
-/* colored avatar based on company initials */
 const COLORS = [
     "from-[#3C80F5] to-[#763CF6]",
     "from-[#E05A00] to-[#E08600]",
@@ -25,16 +23,38 @@ const COLORS = [
     "from-[#0891B2] to-[#3C80F5]",
 ];
 
+function getDirectImageUrl(url) {
+    if (!url) return null;
+    if (url.includes("drive.google.com/file/d/")) {
+        const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) {
+            return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+        }
+    }
+    return url;
+}
+
 function ClientAvatar({ name, logoUrl }) {
+    const [imgFailed, setImgFailed] = useState(false);
+    const directUrl = getDirectImageUrl(logoUrl);
+    
     const initials = (name ?? "").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-    const color    = COLORS[(name?.charCodeAt(0) ?? 0) % COLORS.length];
-    if (logoUrl) {
+    const color = COLORS[(name?.charCodeAt(0) ?? 0) % COLORS.length];
+
+    if (directUrl && !imgFailed) {
         return (
             <div className="w-9 h-9 rounded-xl border border-[#E7EBF2] bg-white flex items-center justify-center overflow-hidden shrink-0">
-                <img src={logoUrl} alt={name} className="w-full h-full object-contain p-1" onError={e => e.currentTarget.style.display = "none"} />
+                <img 
+                    src={directUrl} 
+                    alt={name} 
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-contain p-1" 
+                    onError={() => setImgFailed(true)} 
+                />
             </div>
         );
     }
+
     return (
         <div className={cn("w-9 h-9 rounded-xl bg-gradient-to-br flex items-center justify-center text-white text-[12px] font-bold shrink-0", color)}>
             {initials}
@@ -45,8 +65,8 @@ function ClientAvatar({ name, logoUrl }) {
 export function ClientTable({ data, pagination, onPageChange, onEdit, onDelete }) {
     const router = useRouter();
     const [deleteTarget, setDeleteTarget] = useState(null);
-    const [deleting,     setDeleting]     = useState(false);
-    const [deleteError,  setDeleteError]  = useState("");
+    const [deleting, setDeleting] = useState(false);
+    const [deleteError, setDeleteError] = useState("");
 
     const columns = useMemo(() => [
         {
