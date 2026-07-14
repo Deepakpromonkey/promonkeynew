@@ -10,6 +10,7 @@ import TicketForm from "@/components/tickets/TicketForm";
 import PhaseCard from "@/components/phases/PhaseCard";
 import PhaseForm from "@/components/phases/PhaseForm";
 import UpdatesTab from "@/components/updates/UpdatesTab";
+import ActivityTab from "../activity/ActicityTab";
 import FilesTab from "@/components/files/FilesTab";
 import ChatTab from "./ChatTab";
 
@@ -105,7 +106,7 @@ function DeliveryPhasesCard({ phasesLoading, phases }) {
     );
 }
 
-const TABS = ["Overview", "Plan", "Project Load", "Project Runway", "Updates", "Activity", "Chat", "Tickets", "Files"];
+const TABS = ["Overview", "Phases", "Project Load", "Project Runway", "Updates", "Activity", "Chat", "Tickets", "Files"];
 
 const CLIENT_TABS = ["Overview", "Project Runway", "Updates", "Tickets"];
 
@@ -312,7 +313,7 @@ export default function ProjectDetailPage({ params }) {
         : "—";
 
     const tabCounts = {
-        Plan:    p.progressPercentage ? `${p.progressPercentage}%` : "",
+        Phases:    p.progressPercentage ? `${p.progressPercentage}%` : "",
         Tickets: ticketsTotal ? ticketsTotal : "",
     };
 
@@ -610,7 +611,7 @@ export default function ProjectDetailPage({ params }) {
             )}
 
             {/* Plan tab — staff/admin only (not in CLIENT_TABS, guarded by visibleTabs + safety effect) */}
-            {tab === "Plan" && !isClient && (
+            {tab === "Phases" && !isClient && (
                 <div>
                     {/* Header row */}
                     <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
@@ -797,6 +798,10 @@ export default function ProjectDetailPage({ params }) {
             {tab === "Updates" && (
                 <UpdatesTab projectId={id} projectLead={p.lead?.id} readOnly={isClient} />
             )}
+            {/* Activity tab — staff/admin only (not in CLIENT_TABS) */}
+            {tab === "Activity" && !isClient && (
+                <ActivityTab projectId={id} />
+            )}
 
             {/* Files tab — staff/admin only (not in CLIENT_TABS) */}
             {tab === "Files" && !isClient && (
@@ -809,7 +814,7 @@ export default function ProjectDetailPage({ params }) {
             )}
 
             {/* Other tabs placeholder */}
-            {tab !== "Overview" && tab !== "Plan" && tab !== "Project Runway" && tab !== "Tickets" && tab !== "Updates" && tab !== "Chat" && tab !== "Files" && (
+            {tab !== "Overview" && tab !== "Phases" && tab !== "Project Runway" && tab !== "Tickets" && tab !== "Updates" && tab !== "Activity" && tab !== "Chat" && tab !== "Files" && (
                 <div className="bg-white border border-[#E7EBF2] rounded-2xl px-5 py-16 text-center text-[#94A3B5] shadow-[0_1px_2px_rgba(27,35,48,.06)]">
                     <p className="text-[14px] font-semibold">{tab}</p>
                     <p className="text-[12.5px] mt-1">This section will be available once the API is connected.</p>

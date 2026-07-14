@@ -121,6 +121,18 @@ function mapPhaseDetail(ph) {
     };
 }
 
+/**
+ * Recompute taskStats locally so the progress bar / counters stay correct
+ * after optimistic add/patch/delete operations without refetching the phase.
+ */
+function recalcStats(ph) {
+    const allTasks = [...ph.tasks, ...ph.subPhases.flatMap(sp => sp.tasks)];
+    const total = allTasks.length;
+    const done = allTasks.filter(t => t.status === "DONE").length;
+    const progress = total ? Math.round((done / total) * 100) : 0;
+    return { ...ph, taskStats: { total, done, progress } };
+}
+
 /* ---------------- Task row (inline editable) ---------------- */
 
 function TaskRow({ task, teamOptions, onPatch, onDelete, onOpen }) {
@@ -267,7 +279,9 @@ export default function PhaseDetailPage() {
 
     const [phase,   setPhase]   = useState(null);
     const [project, setProject] = useState(null);
-    const [loading, setLoading] = useState(true);
+    // Only used for the very first fetch — subsequent mutations update state
+    // in place so the whole page never unmounts behind a spinner again.
+    const [initialLoading, setInitialLoading] = useState(true);
     const [error,   setError]   = useState("");
     const [showEditForm,    setShowEditForm]    = useState(false);
     // null = closed, {} = create mode, {id,name,...} = edit mode
@@ -276,13 +290,15 @@ export default function PhaseDetailPage() {
 
     async function loadPhase() {
         if (!phaseId) return;
-        setLoading(true); setError("");
+        setError("");
         try {
             const json = await apiFetch(`/api/phases/${phaseId}`);
             setPhase(mapPhaseDetail(json.data ?? json));
         } catch (e) {
             setError(e.message);
-        } finally { setLoading(false); }
+        } finally {
+            setInitialLoading(false);
+        }
     }
 
     useEffect(() => { loadPhase(); }, [phaseId]);
@@ -302,36 +318,89 @@ export default function PhaseDetailPage() {
         load();
     }, [queryProjectId, phase?.projectId]);
 
+    /* ---------------- optimistic mutations (no refetch) ---------------- */
+
     async function patchTask(taskId, payload) {
+        const snapshot = phase;
+        setPhase(prev => {
+            if (!prev) return prev;
+            const upd = list => list.map(t => (t.id === taskId ? { ...t, ...payload } : t));
+            return recalcStats({
+                ...prev,
+                tasks: upd(prev.tasks),
+                subPhases: prev.subPhases.map(sp => ({ ...sp, tasks: upd(sp.tasks) })),
+            });
+        });
         try {
             await apiFetch(`/api/phases/task/${taskId}`, { method: "PATCH", body: JSON.stringify(payload) });
-            // Reconcile from the server so nested sub-phase task lists and taskStats stay correct.
-            loadPhase();
         } catch (e) {
             toast.error({ title: "Update failed", message: e.message });
+            setPhase(snapshot); // revert on failure
         }
     }
 
     async function deleteTask(taskId, title) {
         if (!window.confirm(`Delete task "${title}"? This can't be undone.`)) return;
+        const snapshot = phase;
+        setPhase(prev => {
+            if (!prev) return prev;
+            return recalcStats({
+                ...prev,
+                tasks: prev.tasks.filter(t => t.id !== taskId),
+                subPhases: prev.subPhases.map(sp => ({ ...sp, tasks: sp.tasks.filter(t => t.id !== taskId) })),
+            });
+        });
         try {
             await apiFetch(`/api/phases/task/${taskId}`, { method: "DELETE" });
             toast.success({ title: "Task deleted", message: `"${title}" has been removed.` });
-            loadPhase();
         } catch (e) {
             toast.error({ title: "Delete failed", message: e.message });
+            setPhase(snapshot);
         }
     }
 
     async function deleteSubPhase(subPhaseId, name) {
         if (!window.confirm(`Delete sub-phase "${name}" and all its tasks? This can't be undone.`)) return;
+        const snapshot = phase;
+        setPhase(prev => prev && recalcStats({
+            ...prev,
+            subPhases: prev.subPhases.filter(sp => sp.id !== subPhaseId),
+        }));
         try {
             await apiFetch(`/api/phases/sub-phase/${subPhaseId}`, { method: "DELETE" });
             toast.success({ title: "Sub-phase deleted", message: `"${name}" has been removed.` });
-            loadPhase();
         } catch (e) {
             toast.error({ title: "Delete failed", message: e.message });
+            setPhase(snapshot);
         }
+    }
+
+    // TaskForm already POSTs and calls onSuccess(json.data) with the created task.
+    // We insert it directly into local state instead of refetching the phase.
+    function handleTaskCreated(raw, subPhaseId) {
+        if (!raw) { loadPhase(); return; } // fallback if API didn't return the created object
+        const newTask = mapTask(raw);
+        setPhase(prev => {
+            if (!prev) return prev;
+            const next = subPhaseId
+                ? { ...prev, subPhases: prev.subPhases.map(sp => sp.id === subPhaseId ? { ...sp, tasks: [...sp.tasks, newTask] } : sp) }
+                : { ...prev, tasks: [...prev.tasks, newTask] };
+            return recalcStats(next);
+        });
+    }
+
+    // SubPhaseForm already POSTs/PATCHes and calls onSuccess(json.data).
+    // Handles both create (append new group) and rename (patch name in place).
+    function handleSubPhaseSaved(raw) {
+        if (!raw) { loadPhase(); return; }
+        setPhase(prev => {
+            if (!prev) return prev;
+            const exists = prev.subPhases.some(sp => sp.id === raw.id);
+            const subPhases = exists
+                ? prev.subPhases.map(sp => sp.id === raw.id ? { ...sp, name: raw.name } : sp)
+                : [...prev.subPhases, mapSubPhase(raw)];
+            return recalcStats({ ...prev, subPhases });
+        });
     }
 
     function openTaskForm(subPhaseId = "") {
@@ -345,7 +414,7 @@ export default function PhaseDetailPage() {
         router.push(pid ? `/promonkey/tasks/${taskId}?projectId=${pid}` : `/promonkey/tasks/${taskId}`);
     }
 
-    if (loading) return (
+    if (initialLoading) return (
         <div className="flex items-center justify-center py-32 gap-3 text-[#94A3B5]">
             <Loader2 size={20} className="animate-spin" />
             <span className="text-[13px]">Loading phase...</span>
@@ -571,7 +640,7 @@ export default function PhaseDetailPage() {
                     phaseId={phase.id}
                     editData={subPhaseFormState.id ? subPhaseFormState : null}
                     onClose={() => setSubPhaseFormState(null)}
-                    onSuccess={() => loadPhase()}
+                    onSuccess={(data) => handleSubPhaseSaved(data)}
                 />
             )}
 
@@ -581,7 +650,7 @@ export default function PhaseDetailPage() {
                     subPhaseId={taskFormFor || null}
                     teamOptions={teamOptions}
                     onClose={() => setTaskFormFor(null)}
-                    onSuccess={() => loadPhase()}
+                    onSuccess={(data) => handleTaskCreated(data, taskFormFor || null)}
                 />
             )}
         </div>

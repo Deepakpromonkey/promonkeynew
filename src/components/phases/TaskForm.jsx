@@ -1,19 +1,21 @@
 "use client";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "../ui/Toast";
 import { apiFetch } from "@/lib/api";
+import RichTextEditor from "@/components/ui/RichTextEditor";
 
 const schema = z.object({
-    title:      z.string().min(1, "Task title is required"),
-    priority:   z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
-    startDate:  z.string().min(1, "Start date is required"),
-    dueDate:    z.string().min(1, "Due date is required"),
-    assigneeId: z.string().optional(),
+    title:       z.string().min(1, "Task title is required"),
+    priority:    z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
+    startDate:   z.string().min(1, "Start date is required"),
+    dueDate:     z.string().min(1, "Due date is required"),
+    assigneeId:  z.string().optional(),
+    description: z.string().optional(),
 });
 
 const PRIORITY_OPTS = ["LOW", "MEDIUM", "HIGH", "URGENT"];
@@ -50,12 +52,12 @@ function toISOEnd(d)   { return new Date(`${d}T23:59:59.000Z`).toISOString(); }
  * If subPhaseId is passed, the task is nested under that sub-phase; otherwise it's
  * an independent, top-level task on the phase.
  */
-export default function TaskForm({ phaseId, subPhaseId = null, teamOptions = [], onClose, onSuccess }) {
+export default function TaskForm({ phaseId, projectId = null, subPhaseId = null, teamOptions = [], onClose, onSuccess }) {
     const [loading, setLoading] = useState(false);
 
-    const { register, handleSubmit, formState: { errors } } = useForm({
+    const { register, handleSubmit, control, formState: { errors } } = useForm({
         resolver: zodResolver(schema),
-        defaultValues: { title: "", priority: "MEDIUM", startDate: "", dueDate: "", assigneeId: "" },
+        defaultValues: { title: "", priority: "MEDIUM", startDate: "", dueDate: "", assigneeId: "", description: "" },
     });
 
     const onSubmit = async (data) => {
@@ -68,8 +70,10 @@ export default function TaskForm({ phaseId, subPhaseId = null, teamOptions = [],
                 startDate:  toISOStart(data.startDate),
                 dueDate:    toISOEnd(data.dueDate),
                 phaseId,
+                ...(projectId && { projectId }),
                 ...(subPhaseId && { subPhaseId }),
                 ...(data.assigneeId && { assigneeId: data.assigneeId }),
+                ...(data.description && { description: data.description }),
             };
 
             // NOTE: creation endpoint assumed as /api/phases/task/create, following the
@@ -91,9 +95,9 @@ export default function TaskForm({ phaseId, subPhaseId = null, teamOptions = [],
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} />
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[480px] mx-4 z-10">
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[560px] mx-4 z-10 max-h-[90vh] overflow-y-auto">
 
-                <div className="flex items-center justify-between px-6 py-5 border-b border-[#E7EBF2]">
+                <div className="flex items-center justify-between px-6 py-5 border-b border-[#E7EBF2] sticky top-0 bg-white rounded-t-2xl">
                     <h2 className="text-[16px] font-bold text-[#1B2330]">
                         {subPhaseId ? "Add Sub-phase Task" : "Add Task"}
                     </h2>
@@ -105,6 +109,20 @@ export default function TaskForm({ phaseId, subPhaseId = null, teamOptions = [],
                 <form onSubmit={handleSubmit(onSubmit)} className="px-6 py-5 space-y-4">
                     <Field label="Task title" error={errors.title?.message} required>
                         <Inp {...register("title")} placeholder="e.g. Define unified data schema" error={errors.title} />
+                    </Field>
+
+                    <Field label="Description" error={errors.description?.message}>
+                        <Controller
+                            name="description"
+                            control={control}
+                            render={({ field }) => (
+                                <RichTextEditor
+                                    value={field.value}
+                                    onChange={field.onChange}
+                                    placeholder="Add more details, steps, or screenshots..."
+                                />
+                            )}
+                        />
                     </Field>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -135,6 +153,7 @@ export default function TaskForm({ phaseId, subPhaseId = null, teamOptions = [],
                             </select>
                         </Field>
                     </div>
+
 
                     <div className="flex items-center justify-end gap-3 pt-2">
                         <button type="button" onClick={onClose}

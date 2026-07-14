@@ -72,11 +72,65 @@ function InfoCard({ title, children }) {
     );
 }
 
+/*
+ * Renders the task's rich-text `description` (HTML produced by
+ * RichTextEditor/Jodit — see components/ui/RichTextEditor.jsx). This is the
+ * only place on the page rendering arbitrary HTML via
+ * dangerouslySetInnerHTML, so it's isolated in its own component.
+ *
+ * NOTE ON SANITIZATION: this assumes `description` only ever comes from
+ * this app's own RichTextEditor (authenticated users on tasks they have
+ * access to), the same trust boundary the phase/description views already
+ * rely on elsewhere. If task descriptions can ever come from an
+ * untrusted/external source, run them through a sanitizer (e.g. DOMPurify)
+ * before rendering here.
+ */
+function DescriptionCard({ html }) {
+    const hasContent = html && html.replace(/<[^>]*>/g, "").trim().length > 0;
+
+    return (
+        <div className="bg-white border border-[#E7EBF2] rounded-2xl px-5 py-4 shadow-[0_1px_2px_rgba(27,35,48,.06)] mb-4">
+            <p className="text-[10px] tracking-[1.4px] font-bold text-[#94A3B5] mb-3">DESCRIPTION</p>
+            {hasContent ? (
+                <>
+                    {/*
+                      Mirrors the heading/list/table rules from
+                      RichTextEditor's own <style jsx global> block, scoped
+                      to .task-description instead of .jodit-wysiwyg, since
+                      Tailwind's preflight reset strips h1-h6 down to
+                      inherited size/weight here too.
+                    */}
+                    <style jsx global>{`
+                        .task-description h1 { font-size: 2em; font-weight: 700; margin: 0.67em 0; line-height: 1.2; }
+                        .task-description h2 { font-size: 1.5em; font-weight: 700; margin: 0.75em 0; line-height: 1.25; }
+                        .task-description h3 { font-size: 1.25em; font-weight: 600; margin: 0.83em 0; line-height: 1.3; }
+                        .task-description h4 { font-size: 1.1em; font-weight: 600; margin: 1em 0; }
+                        .task-description h5 { font-size: 1em; font-weight: 600; margin: 1.1em 0; }
+                        .task-description h6 { font-size: 0.9em; font-weight: 600; margin: 1.2em 0; }
+                        .task-description p { margin: 0.5em 0; }
+                        .task-description ul, .task-description ol { padding-left: 1.5em; margin: 0.5em 0; }
+                        .task-description table { border-collapse: collapse; }
+                        .task-description table td, .task-description table th { border: 1px solid #E7EBF2; padding: 6px 8px; }
+                        .task-description img, .task-description video, .task-description iframe { max-width: 100%; height: auto; border-radius: 8px; }
+                        .task-description a { color: #3C80F5; text-decoration: underline; }
+                    `}</style>
+                    <div
+                        className="task-description text-[13.5px] text-[#1B2330] leading-relaxed"
+                        dangerouslySetInnerHTML={{ __html: html }}
+                    />
+                </>
+            ) : (
+                <p className="text-[13.5px] text-[#94A3B5]">No description provided.</p>
+            )}
+        </div>
+    );
+}
+
 /* ---------------- API <-> UI mapping ---------------- */
 /*
   Actual /api/phases/task/:id response shape:
   {
-    id, title, startDate, dueDate, priority, status,
+    id, title, description, startDate, dueDate, priority, status,
     estimatedHours, loggedHours, phaseId, subPhaseId,
     assigneeId, createdAt, updatedAt,
     assignee: { legalName, profilePhotoUrl },
@@ -92,6 +146,7 @@ function mapTaskDetail(t) {
         id:             t.id,
         code:           t.code ?? t.taskCode ?? null,
         title:          t.title,
+        description:    t.description ?? "",
         status:         t.status ?? "TO_DO",
         priority:       t.priority ?? "LOW",
         startDate:      t.startDate,
@@ -386,6 +441,9 @@ export default function TaskDetailPage() {
                     <StatCard value={`${remaining}h`} label="REMAINING" />
                 </div>
             </div>
+
+            {/* Description */}
+            <DescriptionCard html={task.description} />
 
             {/* Body grid */}
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
